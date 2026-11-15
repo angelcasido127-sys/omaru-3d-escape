@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="tl" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>OMARU: 3D Escape</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #0f1016; color: #fff; font-family: 'Segoe UI', sans-serif; user-select: none; }
+    #hud { position: fixed; top: 15px; left: 15px; right: 15px; display: flex; justify-content: space-between; z-index: 20; pointer-events: none; }
+    .badge { background: rgba(0,0,0,0.75); padding: 8px 14px; border-radius: 20px; font-size: 15px; border: 1px solid #444; }
+    #dialogue { position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); padding: 10px 18px; border-radius: 10px; border-left: 4px solid #ff4757; text-align: center; width: 90%; max-width: 420px; z-index: 20; pointer-events: none; }
+    
+    /* TAP TO ESCAPE STRUGGLE OVERLAY */
+    #escapeOverlay {
+      position: fixed; inset: 0; background: rgba(180, 0, 20, 0.45);
+      display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 50;
+    }
+    .bar-bg { width: 240px; height: 22px; background: #222; border-radius: 12px; border: 2px solid #fff; overflow: hidden; margin: 12px 0; }
+    #escapeFill { width: 30%; height: 100%; background: #2ed573; transition: width 0.05s; }
+    #mashBtn {
+      padding: 18px 36px; font-size: 22px; font-weight: bold; background: #ff4757; color: #fff;
+      border: 3px solid #fff; border-radius: 50px; cursor: pointer; box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+    }
+    #mashBtn:active { transform: scale(0.92); background: #ffa502; }
+
+    #gameOver {
+      position: fixed; inset: 0; background: rgba(10,0,0,0.92);
+      display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 99;
+    }
+  </style>
+  <script src="https://cloudflare.com"></script>
+</head>
+<body>
+  <div id="hud">
+    <div class="badge" id="heartsDisplay">❤️❤️❤️❤️❤️</div>
+    <div class="badge">🏫 Room <span id="roomNum">1</span></div>
+  </div>
+
+  <div id="dialogue">
+    <div style="font-weight:bold; font-size:14px;">OMARU: Kailangan kong makarating sa berdeng 3D portal!</div>
+    <div style="font-size:11px; color:#ccc; font-style:italic;">(I need to reach the green 3D exit portal!)</div>
+  </div>
+
+  <!-- STRUGGLE / ESCAPE MINI-GAME -->
+  <div id="escapeOverlay">
+    <h2 style="margin:0; text-shadow: 0 2px 6px #000;">NAHULI KA! PINDUTIN ANG ESCAPE!</h2>
+    <p style="margin:4px 0; font-size:13px;">(Tap rapidly to break free before losing a heart!)</p>
+    <div class="bar-bg"><div id="escapeFill"></div></div>
+    <button type="button" id="mashBtn">🏃 ESCAPE! (TAP)</button>
+  </div>
+
+  <div id="gameOver">
+    <h1 style="color:#ff4757; font-size:36px;">UBOS NA ANG BUHAY!</h1>
+    <p style="color:#ccc; margin-bottom:20px;">Hindi nakatakas si Omaru... (Game Over)</p>
+    <button type="button" onclick="location.reload()" style="padding:12px 26px; font-size:16px; font-weight:bold; background:#ff4757; color:#fff; border:none; border-radius:8px; cursor:pointer;">ULITIN (RETRY)</button>
+  </div>
+  <script>
+    // 3D SCENE SETUP (Three.js)
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x141722);
+    scene.fog = new THREE.Fog(0x141722, 12, 32);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 11, 12);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+    scene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+    dirLight.position.set(6, 14, 8);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    // 3D Floor
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(30, 30),
+      new THREE.MeshStandardMaterial({ color: 0x222634, roughness: 0.8 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // 3D CHARACTER BUILDER (Omaru vs Mga Babae)
+    function create3DCharacter(isOmaru) {
+      const group = new THREE.Group();
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
+      const hairMat = new THREE.MeshStandardMaterial({ color: isOmaru ? 0x111111 : 0x4a148c });
+      const outfitMat = new THREE.MeshStandardMaterial({ color: isOmaru ? 0xd63031 : 0x6c5ce7 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: isOmaru ? 0x1e272e : 0xffdbac });
+
+      // Head & Long Hair
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 16), skinMat);
+      head.position.y = 1.85; head.castShadow = true; group.add(head);
+      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.05, 0.88), hairMat);
+      hair.position.set(0, 1.75, -0.06); hair.castShadow = true; group.add(hair);
+
+      // Torso
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.9, 0.45), outfitMat);
+      body.position.y = 1.05; body.castShadow = true; group.add(body);
+
+      // Arms & Legs (Articulated for 3D walk animation)
+      const legL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.65, 0.28), pantsMat);
+      legL.position.set(-0.2, 0.32, 0); legL.castShadow = true; group.add(legL);
+      const legR = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.65, 0.28), pantsMat);
+      legR.position.set(0.2, 0.32, 0); legR.castShadow = true; group.add(legR);
+
+      const armL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.75, 0.24), outfitMat);
+      armL.position.set(-0.52, 1.05, 0); group.add(armL);
+      const armR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.75, 0.24), outfitMat);
+      armR.position.set(0.52, 1.05, 0); group.add(armR);
+
+      group.userData = { legL, legR, armL, armR, walk: 0 };
+      scene.add(group);
+      return group;
+    }
+
+    const omaru = create3DCharacter(true);
+    const exitDoor = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 2.2, 0.3),
+      new THREE.MeshStandardMaterial({ color: 0x2ed573, emissive: 0x10ac84 })
+    );
+    exitDoor.position.y = 1.1;
+    scene.add(exitDoor);
+
+    let hearts = 5, room = 1, enemies = [], isCaught = false, escapeMeter = 30, gameOver = false;
+    let targetPos = null, pointerDown = false;
+
+    function updateHearts() {
+      document.getElementById('heartsDisplay').innerText = '❤️'.repeat(Math.max(0, hearts)) + '🖤'.repeat(5 - Math.max(0, hearts));
+    }
+
+    function spawnRoom() {
+      omaru.position.set(-7, 0, 0);
+      exitDoor.position.set(7.5, 1.1, (Math.random() - 0.5) * 10);
+      enemies.forEach(e => scene.remove(e));
+      enemies = [];
+      for (let i = 0; i < 3 + room; i++) {
+        const g = create3DCharacter(false);
+        g.position.set((Math.random() - 0.2) * 10, 0, (Math.random() - 0.5) * 12);
+        g.userData.speed = 0.045 + Math.random() * 0.02;
+        enemies.push(g);
+      }
+    }
+    spawnRoom();
+
+    // TAP TO ESCAPE MINI-GAME
+    const escapeOverlay = document.getElementById('escapeOverlay');
+    const escapeFill = document.getElementById('escapeFill');
+    document.getElementById('mashBtn').addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      escapeMeter += 16;
+      if (escapeMeter >= 100) {
+        // Nakawala si Omaru!
+        isCaught = false;
+        escapeOverlay.style.display = 'none';
+        enemies.forEach(en => {
+          if (en.position.distanceTo(omaru.position) < 3.5) en.position.x += 4;
+        });
+      }
+    });
+
+    // Touch / Mouse 3D Raycast Movement
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    function setMove(clientX, clientY) {
+      mouse.x = (clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(floor);
+      if (hits.length > 0) targetPos = hits[0].point;
+    }
+    window.addEventListener('pointerdown', e => { if (!isCaught && !gameOver) { pointerDown = true; setMove(e.clientX, e.clientY); } });
+    window.addEventListener('pointermove', e => { if (pointerDown && !isCaught && !gameOver) setMove(e.clientX, e.clientY); });
+    window.addEventListener('pointerup', () => { pointerDown = false; targetPos = null; });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (gameOver) return;
+
+      if (isCaught) {
+        escapeMeter -= 0.45;
+        escapeFill.style.width = Math.max(0, escapeMeter) + '%';
+        if (escapeMeter <= 0) {
+          hearts--;
+          updateHearts();
+          isCaught = false;
+          escapeOverlay.style.display = 'none';
+          if (hearts <= 0) {
+            gameOver = true;
+            document.getElementById('gameOver').style.display = 'flex';
+          } else {
+            omaru.position.set(-7, 0, 0);
+          }
+        }
+      } else {
+        // Move Omaru
+        if (targetPos) {
+          const dx = targetPos.x - omaru.position.x;
+          const dz = targetPos.z - omaru.position.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist > 0.2) {
+            omaru.position.x += (dx / dist) * 0.095;
+            omaru.position.z += (dz / dist) * 0.095;
+            omaru.rotation.y = Math.atan2(dx, dz);
+            omaru.userData.walk += 0.25;
+            const s = Math.sin(omaru.userData.walk) * 0.6;
+            omaru.userData.legL.rotation.x = s; omaru.userData.legR.rotation.x = -s;
+            omaru.userData.armL.rotation.x = -s; omaru.userData.armR.rotation.x = s;
+          }
+        }
+
+        // Check Exit Portal
+        if (omaru.position.distanceTo(exitDoor.position) < 1.5) {
+          room++;
+          document.getElementById('roomNum').innerText = room;
+          spawnRoom();
+        }
+
+        // Move 3D Enemies
+        for (const en of enemies) {
+          const dx = omaru.position.x - en.position.x;
+          const dz = omaru.position.z - en.position.z;
+          const dist = Math.hypot(dx, dz);
+          en.position.x += (dx / dist) * en.userData.speed;
+          en.position.z += (dz / dist) * en.userData.speed;
+          en.rotation.y = Math.atan2(dx, dz);
+          en.userData.walk += 0.22;
+          const s = Math.sin(en.userData.walk) * 0.6;
+          en.userData.legL.rotation.x = s; en.userData.legR.rotation.x = -s;
+
+          if (dist < 1.0) {
+            isCaught = true;
+            escapeMeter = 35;
+            escapeOverlay.style.display = 'flex';
+            break;
+          }
+        }
+      }
+
+      camera.position.x = omaru.position.x;
+      camera.position.z = omaru.position.z + 10;
+      camera.lookAt(omaru.position.x, 1, omaru.position.z);
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
